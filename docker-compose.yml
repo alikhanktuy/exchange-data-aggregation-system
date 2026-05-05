@@ -1,0 +1,67 @@
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_DB: ticks_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./src/Infrastructure/Persistence/Migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mock-exchange:
+    build:
+      context: .
+      dockerfile: src/SimulatedServer/Dockerfile
+    ports:
+      - "5000:5000"
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  aggregator:
+    build:
+      context: .
+      dockerfile: src/Aggregator/Dockerfile
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mock-exchange:
+        condition: service_started
+    environment:
+      - ConnectionStrings__Postgres=Host=timescaledb;Database=ticks_db;Username=postgres;Password=postgres
+      - ConnectionStrings__Redis=redis:6379
+      - Exchanges__0__Name=ExchangeA
+      - Exchanges__0__Url=ws://mock-exchange:5000/ws/exchangeA
+      - Exchanges__1__Name=ExchangeB
+      - Exchanges__1__Url=ws://mock-exchange:5000/ws/exchangeB
+      - Exchanges__2__Name=ExchangeC
+      - Exchanges__2__Url=ws://mock-exchange:5000/ws/exchangeC
+
+volumes:
+  timescale_data:
+  redis_data:

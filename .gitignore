@@ -1,0 +1,16 @@
+bin/
+obj/
+.vs/
+.idea/
+.vscode/
+TestResults/
+BenchmarkDotNet.Artifacts/
+logs/
+*.user
+*.suo
+*.rsuser
+*.nupkg
+*.snupkg
+*.log
+*.tmp
+*.cache
